@@ -1,0 +1,481 @@
+\documentclass[a4paper]{jpconf}
+\usepackage{graphicx}
+\usepackage{amsmath,amsfonts}
+\newcommand{\R}{{\mathbb R}}
+\newcommand{\uX}{{\underline X}}
+\begin{document}
+\title{On using convolutions with exponential distributions for solving a Kolmogorov backward equation}
+
+\author{O. Kudryavtsev$^1$ and V. Rodochenko$^2$}
+
+\address{$^1$ Russian Customs Academy Rostov branch, Budennovskiy 20, Rostov-on-Don 344002, Russia}
+\address{$^2$ Institute for Mathematics, Mechanics, and Computer Science in the name of I.I. Vorovich (Southern Federal University), Milchakova str. 8a, Rostov-on-Don 344090, Russia}
+
+\ead{$^1$ koe@donrta.ru, $^2$ vrodochenko@gmail.com}
+
+\begin{abstract}
+		We propose a numerical method to solve 3-dimensional partial differential equations with variable coefficients, which appear in applications focused on studying random walks in the presence of an absorbing barrier. We restrict ourselves to the case of the Kolmogorov backward equation, which most commonly arises in mathematical finance. A probabilistic interpretation of the problem we use allows to apply Carr randomization for dimensionality reduction and employ the Wiener-Hopf factorization to solve the arising 1-dimensional problems. The key idea of the approach proposed is to interpret the expected present value operators, which appears in factorization process, as convolutions of the solution function with a certain exponential distribution. We construct a generalization of the method  for the case of exponentially distributed jumps using the Russian splitting method. The scheme presented makes possible to reduce the number of operations required to solve 1-D problems to $O(n)$, from $O(n\ln{n})$, which Fourier transform-based approach required.
+\end{abstract}
+
+\section{Introduction}
+
+Diffusion equations are used to describe a vast class of processes in physics, natural sciences and economics. In the years since Dynkin, Feinman, and Katz published their fundamental works, it has been well known that the solution to a diffusion equation in a given domain can be interpreted as an expected value of a function of the Brownian motion at the first exit point from the domain. It is also well known that the Brownian motion itself can in some cases be efficiently used to model a number of physics, social and financial processes. 
+
+Driven by applications where the concept of jumps is vital (see, for example, \cite{cont_tankov}), the idea was later generalized for the case of L\'evy processes.
+This approach has established itself as a valuable and important instrument in mathematical finance, where certain drawbacks of the Black-Scholes model \cite{b_s} became more and more pronounced.
+To cover the discrepancies between Brownian motion-based approximations and historical asset prices, a vast of alternative models emerged, an overview of which can be found in \cite{cont_tankov, itkin} and other related sources.
+
+In recent years there has been a dramatic increase in interest in models where there is more than one source of randomness, where L\'evy models, either purely gaussian or with discontinuous trajectories are combined together.
+
+A subset of such models where the market volatility or variance is governed by a random process is referred to as ``stochastic volatility models''. Perhaps the most widely used model of this class is the Heston \cite{heston} model. It has closed-form solutions for certain basic, but commonly encountered problems based on Kolmogorov backward equation, where no absorbing barriers are taken into account.
+
+A more general case of the Heston model, which allows normally distributed jumps similar to \cite{merton} for process trajectories, is known as the Bates model \cite{bates}. The former can be later generalized from into a form where jump process may have a different distribution. As an example we can mention the double-exponential Kou model introduced in \cite{kou}.
+
+Solving problems in the presence of an absorbing barrier is more complicated, due to the fact that the solution depends on the whole trajectory of a process considered. As a rule, there are no known analytical methods and the only option is to use the methods of numerical analysis.
+
+With a suitable initial and boundary conditions, the Kolmogorov backward equation can be solved in Heston and Bates models. There is a number of methods to obtain the solution. They can be roughly divided into several wide branches.
+
+First and foremost, there is a series of Monte-Carlo methods. Among them we may mention [1], as it provides relatively good speed and accuracy away from a barrier. The most significant drawback of Monte-Carlo methods is low computational performance, which comes from a huge number of simulations it takes to achieve good accuracy. It is also important to find a good unbiased source of randomness for computations.
+
+The second branch of methods uses finite-difference schemes (see, for example, \cite{chiarella},\cite{zvan}). A comprehensive review on such methods was presented in \cite{zanette_heston}. They commonly require a sufficiently dense grid to achieve good computational accuracy, which also makes them computationally expensive. To improve convergence speed, some authors also apply operator splitting technique (see, for example {\cite{ikonen-toivanen, itkin}).
+
+Methods based on approximating trees can be considered as implicit-explicit schemes. For example, a method proposed in \cite{vellekoop_nie} has good accuracy and robustness for parameter values, but the number of nodes in the tree it uses, grows quadratically with the number of time steps. 
+
+It is possible, in certain cases, to develop semi-analytical methods based on analyzing an asymptotic behaviour for short time intervals (see \cite{medvedev_scailett}. This approach is reported to have a good potential for generalization, although being computationally demanding. A wide class of methods (see \cite{fang}) relies on Fourier transform.
+
+There are also hybrid methods where variance process approximation is constructed (for example, \cite{zanette_tree, chourdakis}). An idea behind this approach is to reduce dimensions of the original problem from $3$ to $1$ and solve a system of partial differential equations. It can be shown (see \cite{kudr_mex}) that the method of lines, which is commonly used to justify this approach, is equivalent to time randomization introduced by P. Carr in \cite{carr}. To solve the system either finite-difference methods (see \cite{zanette_heston}) or the Wiener-Hopf factorization (see \cite{kudr_mex, kudr_jopcs}) can be applied.
+
+In the present article, we propose a new hybrid method based on interpreting estimated present value (EPV) operators as convolutions. The method uses the Wiener-Hopf factorization and operator splitting method.
+
+\section{Materials and methods}
+
+\subsection{Problem setup}\label{problems-setup}
+Let us consider a 3-dimensional partial differential equation for function $u = u(x,t)$, where $x = (x_1,x_2)\in\mathbb{R}^2$, $t\in\mathbb{R}$:
+
+\begin{equation}\label{equation-initial}
+\Bigl(\frac{\partial}{\partial_t} + L\Bigr) u = 0, \quad \textrm{with} \quad L = \sum_{i} \mu_i(x) \frac{\partial}{\partial x_i} + \frac{1}{2} \sum_{i,j} (\sigma \sigma^T)_{ij}(x) \frac{\partial^2}{\partial x_i \partial x_j},
+\end{equation}
+indices $i = 1,2$, $j=1,2$; functions $\mu(x) = (\mu_1(x),\mu_2(x))$ and
+$$\sigma(x) =
+\begin{pmatrix}
+\sigma_{11}(x) & \sigma_{12}(x) \\
+\sigma_{21}(x) & \sigma_{22}(x)
+\end{pmatrix}$$
+satisfies conditions of Theorem 5.2.1 \cite{oksendal}.
+Let us recall that $\mu:\R^2\to\R^2$ and $\sigma:\R^2\to\R^2\times\R^2$ (or sometimes $\frac{1}{2}(\sigma \sigma^T)$) are being reffered to as drift and diffusion coefficients, respectively). An equation \eqref{equation-initial}, known as the Kolmogorov backward equation (or diffusion equation), describes an evolution of a 2-dimensional random process and arises in various applications.
+
+Let $T>0$ be a time moment, $H>0$ -- an absorbing barrier, $g(x): \R \rightarrow \R^{\ge 0}$ -- some suitable function, which decays rapidly on infinity. Consider an equation \eqref{equation-initial} with the terminal and boundary conditions defined as follows:
+\begin{equation}\label{problem-initial}
+\begin{array}{l}
+\begin{cases}
+(\frac{\partial}{\partial t} + L) u = 0, \quad &x_1 > H,  t < T, \\
+\smallskip \\
+u(x_1,x_2,T) = g(x_1), \quad &x_1 > H, \\
+u(x_1,x_2,t) = 0, \quad &x_1 \le H, t \le T.\\
+\end{cases}
+\end{array}
+\end{equation}
+
+A review on uniqueness and existence conditions for a class of problems with Kolmogorov equation can be found in \cite{estrom, oksendal}, and, for less general case, in \cite{chiarella, heston_optandbubbles}.
+
+Although general analytical solution is not known, one can develop numerical methods based on the exact form of $\mu_i(x)$ and $\sigma(x)$. 
+An approach we propose here draws on a probabilistic interpretation of the equation. Let $B_1(t), B_2(t)$ be independent Wiener processes (Brownian motions). It can be shown (see. \cite{oksendal}) that the function $u$ allows a representation as a conditional expectation of the event of $X_t$ exit from a domain $x_1\le H$, where $X_t = (X_1(t), X_2(t))$ is defined by a system of differential equations in Ito form:
+\begin{equation}\label{processes-initial}
+\begin{array}l
+\begin{cases}
+dX_1(t) = \mu_1 dt + \sigma_{11} dB_1(t) + \sigma_{12} dB_2(t), \\
+dX_2(t) = \mu_2 dt + \sigma_{21} dB_1(t) + \sigma_{22} dB_2(t).
+\end{cases}
+\end{array}
+\end{equation}
+
+The solutions of \eqref{processes-initial} are referred to as Ito diffusions, as they can be used to describe a dynamics of a particle in a fluid flow. 
+
+An important case of the problem \eqref{equation-initial} appears in mathematical finance. Let us define positive constants $\kappa_V, \theta_V$, $\sigma_V$; $\rho \in (-1,1)$. Let $\hat{\rho} = \sqrt{1 - \rho^2}$ and set $\sigma_{22} = 0$. Let us denote $X_1(t)$ as $S_t$ and $X_2(t)$ as $V_t$. Assuming $\mu_1 = 0$, $\mu_2 = \kappa_V(\theta_V - V_t)$ and
+
+$$\sigma =
+\begin{pmatrix}
+\rho \sqrt{V_t} S_t & \hat{\rho} \sqrt{V_t} S_t \\
+\sigma_V\sqrt{V_t} & 0
+\end{pmatrix},$$
+
+from \eqref{processes-initial} we derive a system: 
+\begin{equation}\label{processes-initial2}
+\begin{array}l
+\begin{cases}
+dS_t = \sqrt{V_t} S_t (\rho dB_1(t) + \hat{\rho} dB_2(t)),\\
+dV_t = \kappa_V(\theta_V - V_t) dt + \sigma_V \sqrt{V_t}dB_1(t).
+\end{cases}
+\end{array}
+\end{equation}
+For a jump-diffusional case the equation for $S$ also has a jump component, which at this point we assume zero. A review on existence and uniqueness conditions for this case can be found in \cite{cont_tankov}. An infinitesimal operator $L$ from \eqref{equation-initial}, in terms of $u=u(S,v,t)$ (where $x_1$ is replaced with $S$ for convenience, and $x_2$ is replaced with $v$), can be represented as:
+\begin{equation}\label{generator-L}
+L = \frac{1}{2}S^2 v \frac{\partial ^ 2}{\partial S ^ 2} + 
+\rho \sigma_V v S \frac{\partial ^ 2}{\partial S \partial v} + 
+\frac{1}{2}\sigma^2_V v\frac{\partial ^ 2}{\partial v ^ 2} + 
+\kappa_V(\theta_V - v) \frac{\partial}{\partial v}.
+\end{equation}
+
+In financial terms, the process $S_t$ describes the dynamics of an asset price, whereas $V_t$ (which is the Cox-Ingersoll-Ross (CIR \cite{cir} process) defines its variation. The parameter $\kappa_V$ denotes a mean reversion rate of $V_t$ to a value $\theta_V$, and the parameter $\sigma_V$ is a volatility of variation.
+The processes $(\rho dB_1(t) + \hat{\rho} dB_2(t))$ and $B_1(t)$ are Brownian motions with correlation $\rho$. Also,
+$S_t$ is considered a martingale under a suitable risk-neutral measure.
+
+The problem \eqref{problem-initial} may be, therefore, rewritten in the following terms:
+\begin{equation}\label{problem-initial-upbarrier}
+\begin{array}{l}
+\begin{cases}
+(\frac{\partial}{\partial t} + \frac{1}{2}S^2 v \frac{\partial ^ 2}{\partial S ^ 2}& + 
+\rho \sigma_V v S \frac{\partial ^ 2}{\partial S \partial v} + 
+\frac{1}{2}\sigma^2_V v\frac{\partial ^ 2}{\partial v ^ 2} + 
+\kappa_V(\theta_V - v) \frac{\partial}{\partial v}) u = 0, \\ &S > H, v > 0,  t < T, \\
+\smallskip \\
+u(S,v,T) = g(S), \quad &S > H, v > 0, \\
+u(S,v,t) = 0, \quad &S \le H, v > 0, t \le T.\\
+\end{cases}
+\end{array}
+\end{equation}
+
+At the earliest possible moment in time, $T=0$, the solution for \eqref{problem-initial-upbarrier} may be written as an expectation in the following form:
+\begin{equation}\label{solu}
+u(S,v,0) = E[{\bf 1}_{(T,+\infty)}(T_H) \cdot g(S_T) | S_0 = S, V_0 = v],
+\end{equation}
+where $T_H$ is the moment when $S_t$ first enters $(0, H]$. 
+
+From a financial viewpoint, $u(S,v,0)$ may be interpreted as a price of a barrier put option with a payoff function $g(S) = \max\{(K-S), 0\}$, where $K>0$. This type of option become worthless if the price of an underlying asset falls below a barrier $H$. Such contingent claims have both theoretical and practical value, as it is possible to evaluate economical risks associated with crossing certain price levels in their terms. The price of such contracts relies upon the whole trajectory of an underlying asset.
+
+\subsection{Process substitution}
+Finding a numerical solution of \eqref{problem-initial-upbarrier} in its original form is difficult, in particular, due to the fact that the generator $L$ has partial derivatives. This effect may be avoided by using a suitable process substitution, for example: $Y_t = \ln(\frac{S_t}{H}) - \frac{\rho}{\sigma_V}V_t.$ It its terms $S_t = H \exp(Y_t + \frac{\rho}{\sigma_V}V_t).$
+An operator $L$ in this case has the following simplified form:
+\begin{equation*}
+L = \frac{1}{2}\hat{\rho}^2 v \frac{\partial^2}{\partial y^2} +
+\frac{1}{2}\sigma^2_V v\frac{\partial}{\partial v^2} + 
+\mu_Y(v)\frac{\partial}{\partial y} + 
+\mu_V(v)\frac{\partial}{\partial v},
+\end{equation*}
+where 
+$$\mu_Y(v) = - \frac{1}{2}v - \frac{\rho}{\sigma_V}\kappa_V(\theta_V - v) \quad \textrm{and} \quad  \mu_V(v) = \kappa_V(\theta_V - v)$$ are drift coefficients calculated for $v$. The equations for processes can now be written as follows:
+\begin{equation}{\label{system-subst}}
+\begin{array}{l}
+\begin{cases}
+d Y_t = \mu_Y(V_t)dt+\hat{\rho}\sqrt{V_t} dB_2(t),
+\smallskip\\
+dV_t= \mu_V(V_t)dt+\sigma_V\sqrt{V_t}dB_1(t).
+\end{cases}
+\end{array}
+\end{equation}	
+Unfortunately, making this substitution inevitably changes the behaviour of the absorbing battier. Putting $f(y,v,t)=u\Bigl(H \exp(y + \frac{\rho}{\sigma_V}v),v,t\Bigr)$, 
+$g(y) = g(He^{y+\frac{\rho}{\sigma}v})$ and noting that the condition $S_t > H$ now has a form $Y_t + \frac{\rho}{\sigma_V} V_t > 0$, one can observe that the problem \eqref{problem-initial-upbarrier} changes respectively:
+\begin{equation}
+\begin{array}{l}
+\begin{cases}
+\Bigl(\frac{\partial}{\partial_t} + \frac{1}{2}\hat{\rho}^2 v \frac{\partial^2}{\partial y^2} &+
+\frac{1}{2}\sigma^2_V v\frac{\partial}{\partial v^2} + 
+\mu_Y(v)\frac{\partial}{\partial y} + 
+\mu_V(v)\frac{\partial}{\partial v}\Bigr) f = 0, \\
+\smallskip
+& y +\frac{\rho}{\sigma_V}v >0, v > 0,  t < T, \\
+f(y,v,T) = g(y), \quad &y+\frac{\rho}{\sigma_V}v>0, v > 0, \\
+f(y,v,t) = 0, \quad &y + \frac{\rho}{\sigma_V}v\le 0, v > 0, t \le T.\\
+\end{cases}
+\end{array}
+\end{equation}
+Then $T_H$ can be interpreted as the first time the process $Y_t + \frac{\rho}{\sigma}V_t$ enters $(-\infty, 0]$:
+$$T_H = \inf_{t \ge 0}\{t: Y_t +\frac{\rho}{\sigma_V}V_t \le 0\},$$
+and, therefore, the expectation \eqref{solu} can be rewritten in terms of $f$ as:
+\begin{equation} \label{expectation-subst}
+f(y,v,0) = E^{y,v}[{\bf 1}_{(T, +\infty)}(T_H) g(Y_T)].
+\end{equation}
+Let us recall that we use the notion $E^{y,v}[\cdot]$ in a sense that the respective conditional expectation is calculated with $Y_0 = y, V_0 = v$.
+
+\subsection{Randomization and approximation}
+Let us choose a big $N \in \mathbb{N}$ and define $\Delta t = T/N$. Let us then put $q>0$, $r>0$, and denote a random exponentially distributed variable with an average value of $\Delta t$ as $T_q$. Now we may use an approach introduced in \cite{kudr_jopcs} to the model we consider in the present paper.
+
+Let us briefly recall its idea. Using a Carr randomization technique, which has been justified and extended in \cite{touzi}, we can observe that the calculation of expectation \eqref{expectation-subst} comes down to a sequence of recurrent problems for a sequence of functions $f_{n}(y, v)$, $n = 0,1,\dots,N$, where $f_{0}(y, v) \approx f(y,v,0)$, $f_{N}(y, v) = g(y)$. Each one of them is essentially an approximation for $f(y, v, \sum_{j=1}^{n} T_q^j)$, where $T_q^j$ is a sequence of independent random variables, distributed identically with $T_q$, which does not depend on processes $Y, V$. For the sake of brevity we will denote each of them as $T_q$. An approximation for each of $f_{n}(y, v)$ can be written with respect to a Markov chain, which resides on a recombining binomial tree $V_{n,k}$:
+\begin{equation}{\label{tree-original}}	
+V_{n,k} = \bigr{(}\sqrt{V_0} + \frac{\sigma_V}{2}(2k-n)\sqrt{\Delta t}\bigr{)}^2 \cdot {\bf 1}_{(0, +\infty)}\bigr{(}\sqrt{V_0} + \frac{\sigma_V}{2}(2k-n)\sqrt{\Delta t}\bigr{)},
+\end{equation}
+where $n = 0,1,\dots,N$, $k = 0,1,\dots,n$, and transitions from a node with indexes $(n,k)$ are only allowed to nodes with indices $(n+1, k_u)$ and $(n+1, k_d)$, and happen with probabilities $p_u$ and $p_d$ respectively. The values $k_u, k_d$ and $p_u, p_d$ are calculated using the method described in \cite{zanette_tree} based on parameters of $V_t$.
+With all that, the calculation of approximate values of $f_{n}(y, v)$ can be reduced to iterative calculation of a sequence of expectations $f_{n,k}(y) := f_n(y, V_{n,k})$ associated with the nodes of the recombining binomial tree, in a form:
+\begin{equation}\label{pupd}
+f_{n,k}(y) = {\bf 1}_{(0, +\infty)} (y + \frac{\rho}{\sigma_V} V_{n,k}) \cdot(p_u f^u_{n,k}(y) + p_d f^d_{n,k}(y)),
+\end{equation}
+where 
+\begin{equation}\label{fufd}
+f^u_{n,k}(y) =  E^{y} \bigr{[}{\bf 1}_{(0, +\infty)} (\underline{Y}_{T_q}^{n+1, k_u} + \frac{\rho}{\sigma_V}V_{n+1, k_u}) \cdot f_{n+1}(y + Y_{T_q}^{n+1, k_u}, V_{n+1, k_u})\bigr{]},
+\end{equation}
+and ${Y}_{T_q}^{n, k}$ is a value of $Y_{T_q}$ from \eqref{system-subst} when $V_{T_q} = V_{n,k}$; and the value of $f^d_{n,k}(y)$ is calculated analogously.
+
+\subsection{Finding the solution in terms of EPV operators $\mathcal{E}^{\pm}$}\label{factorization-section}
+
+An operator 
+\begin{equation}\label{epv-operator}
+\mathcal{E}_q F(x) = q E^x[\int_{0}^{+\infty} e^{-qt} F(X_t) dt] = E[F(x+X_{T_q})],
+\end{equation}
+where $X_t $ -- is an Ito diffusion, is referred to as the Expected Present Value (EPV) operator (see, for example, \cite{kudr_and_lev}). Let us define a supremum process $X_t$ as 
+$$\overline{X_t} = \sup_{0\le s \le t} X_t,$$ 
+and an infimum process -- as 
+$$\underline{X_t} = \inf_{0\le s \le t} X_t,$$
+respectively. We can define operators $\mathcal{E}^{\pm}_q F(x)$ for them analogously as:
+\begin{equation*}
+\begin{array}{l}
+\mathcal{E}^{+}_q F(x) = q E^x[\int_{0}^{+\infty} e^{-qt}F(\overline{X}_t)dt] = E[F(x+\overline{X}_{T_q}], \\
+\smallskip\\
+\mathcal{E}^{-}_q F(x) = q E^x[\int_{0}^{+\infty} e^{-qt}F(\underline{X}_t)dt] = E[F(x + \underline{X}_{T_q})].
+\end{array}
+\end{equation*}
+Using a property $\overline{X}_t \overset{d}{\sim} X_t - \underline{X}_t$, one can (see, for example, \cite{boya_lev}) calculate the value of $f^u_{n,k}(y)$ as:
+\begin{equation*}
+f^u_{n,k}(y) = q \mathcal{E}^{-}_{q} \biggr{(} {\bf 1}_{(0, +\infty)}(y+\frac{\rho}{\sigma_{V}}V_{n+1,k_u}) \cdot \mathcal{E}^{+}_{q}f_{n+1, k_u}(y) \biggr{)},
+\end{equation*}
+and use an analogous formula for $f^d_{n,k}(y)$. Let us note that $\mathcal{E}^{\pm}_{q}$ can be interpreted as pseudo-differential operators (PDO), and numerically implemented by means of the Fast Fourier Transform, which require $O(n\ln{n})$ operations.
+
+For the processes considered there also an interpretation of $\mathcal{E}_q$ and $\mathcal{E}^\pm_q$ as convolutions exist:
+
+$$ \mathcal{E}_q F(x) = \int_{-\infty}^{+\infty} F(x+u) P_q(du),\qquad \mathcal{E}^{\pm}_q F(x) = \int_{-\infty}^{+\infty} F(x+u) P^{\pm}_q(du),$$
+where $P^{+}_q(-\infty, 0) = 0, \quad P^{-}_q(0, +\infty) = 0.$
+
+If the characteristic exponent of the process $X_t$ is a suitable function $\psi(\xi),$ then characteristic functions for distributions $P^{\pm}_q(du)$ are $\phi^{\pm}(\xi)$, such that 
+\begin{equation}\label{factorization-diffusion}
+\phi^+(\xi) \cdot \phi^-(\xi) = q (q + \psi(\xi))^{-1}.
+\end{equation}
+ 
+The expression \eqref{factorization-diffusion} is a special case of the Wiener-Hopf factorization for a symbol of a PDO. Let us also note that here $q (q + \psi(\xi))^{-1}$ is a symbol of EPV operator $\mathcal{E}_q$, and  $\phi^\pm(\xi)$ are respective symbols of $\mathcal{E}^\pm_q.$
+
+In the present case, the characteristic function of the process $Y^{n,k}_{t}$, $t < T_q$, has a form 
+\begin{equation}\label{charexp-diffusional}
+\psi(\xi) = \frac{\sigma_{n,k}^2}{2} \xi^2 - i \gamma_{n,k} \xi,
+\end{equation}
+where $\sigma_{n,k} = \hat{\rho}\sqrt{V_{n,k}}$, $\gamma_{n,k} = \mu_{Y}(V_{n,k}).$
+
+The expression $q(q+\psi(\xi))^{-1}$, therefore, allows an analytical factorization in form $\phi^+(\xi) \phi^-(\xi)$:
+\begin{equation}\label{phipm-diffusional}
+\phi^+(\xi) = \frac{\beta^+_q}{\beta^+_q - i\xi}, \quad \phi^-(\xi) = \frac{-\beta^-_q}{-\beta^-_q + i\xi},
+\end{equation}
+where
+\begin{equation}\label{betas-diffusional}
+\beta^+_q = \frac{-\gamma_{n,k} + \sqrt{\gamma_{n,k}^2 + 2\sigma_{n,k}^2 q}}{\sigma_{n,k}^2}, \qquad \beta^-_q = \frac{-\gamma_{n,k} - \sqrt{\gamma_{n,k}^2 + 2\sigma_{n,k}^2 q}}{\sigma_{n,k}^2}.
+\end{equation}
+The formulate for the respective exponential distributions $P^\pm (du)$ would be as follows: 
+$$P^-_q(du) = -\beta^-_q e^{-\beta^-_q u} {\bf 1}_{(-\infty, 0)}(u) du, \quad P^+_q(du) = \beta^+_q e^{-\beta^+_q u} {\bf 1}_{(0, +\infty)}(u) du$$.
+
+Let us define a reasonably dense grid of equally spaced points $y_k$ with a distance $h$ between them: $y_k = y^{\ast} + yh$, $k = 0,1,...M$, where $M \in \mathbb{N}$ is big.
+Let us then denote, for brevity, $F_n(y) := f^u_{n,k}(y)$, $F_{n+1}(y) := f^u_{n+1,k_u}(y)$ and consider the following equation:
+\begin{equation} \label{convolution-calculation}
+\mathcal{E}^+F_{n+1}(y_k) = \int_{0}^{+\infty} \beta^+_{q} e^{-\beta^+_{q}u} F_{n+1}(y_k + u)du. 
+\end{equation}
+As $\lim_{y\to +\infty} F_n(y) = \lim_{y\to +\infty} g(y) = 0$, we restrict the integration area with a finite $y^{\ast}>0$. It is straightforward that if $ y_k + u < y^{\ast}$, then $u < y^{\ast} - y_k.$ Therefore, we get:
+$$ \mathcal{E}^+F_{n+1}(y_k) \approx \int_{0}^{y^{\ast} - y_k} \beta^+_{q} e^{-\beta^+_{q}u} F_{n+1}(y_k + u) du.$$ 
+Now let us make a substitution: $w = u + y_k$. Then $u = w - y_k$, $u = 0 \rightarrow w = y_k$, $u = y^{\ast} - y_k \rightarrow w = y^{\ast}:$
+
+$$ \mathcal{E}^+F_{n+1}(y_k) \approx \int_{y_k}^{y^{\ast}} \beta^+_{q} e^{-\beta^+_{q}(w-y_k)}F_{n+1}(w) dw 
+= e^{\beta^+_{q}y_k} \int_{y_k}^{y^{\ast}} \beta^+_{q} e^{-\beta^+_{q}w} F_{n+1}(w) dw.$$
+From a boundary condition in \eqref{fufd} it follows that if $y_k - h < -\frac{\rho}{\sigma_V}V_{n+1,k_u}$, then $F_{n+1}(y_{k} - h) = 0$. For $y_k - h > -\frac{\rho}{\sigma_V}V_{n+1,k_u}$, $F_{n+1}(y_{k-1}) := F_{n+1}(y_{k}-h)$ may be calculated as:
+$$\mathcal{E}^+ F_{n+1}(y_{k-1}) = 
+e^{\beta^+_{q}(y_k - h)} \biggr{(}\int_{y_k}^{y^{\ast}}  \beta^+_{q} e^{-\beta^+_{q} w} F_{n+1}(w) dw + \int_{y_k - h}^{y_k} \beta^+_{q} e^{-\beta^+_{q} w} F_{n+1}(w) dw \biggr{)} = $$
+$$ = e^{-\beta^+_{q} h} \mathcal{E}^+ F_{n+1}(y_k) + e^{-\beta^+_{q}h}\int_{y_k - h}^{y_k} \beta^+_{q} e^{-\beta^+_{q} (w - y_k)} F_{n+1}(w) dw. $$
+Using the simplest trapezoid approximation, we can get the following formula:
+$$\mathcal{E}^+ F_{n+1}(y_{k-1}) \approx e^{-\beta^+_{q} h}\mathcal{E}^+ F_{n+1}(y_k) + \frac{h}{2} \cdot \beta^+_{q} \biggr{(}F_{n+1}(y_{k-1}) + e^{-\beta^+_{q} h} F_{n+1}(y_k)\biggr{)}. $$
+To use Simpson formula and improve accuracy we may consider two neighbouring values:
+
+$$\mathcal{E}^+ F_{n+1}(y_{k-2}) =  e^{-2\beta^+_{q} h} \mathcal{E}^+ F_{n+1}(y_k) + e^{-2\beta^+_{q}h}\int_{y_k - 2h}^{y_k} \beta^+_{q} e^{-\beta^+_{q} (w - y_k)} F_{n+1}(w) dw. $$
+
+\begin{align}
+\mathcal{E}^+ F_{n+1}(y_{k-2}) \approx e^{-2\beta^+_{q} h}\mathcal{E}^+ F_{n+1}(y_k) &+ \\ + \frac{h}{3} \cdot \beta^+_{q} \biggr{(}
+F_{n+1}(y_{k-2}) &+ 
+4 e^{-\beta^+_{q} h}  F_{n+1}(y_{k-1}) + e^{-2\beta^+_{q} h} F_{n+1}(y_k)\biggr{)}. 
+\end{align}
+
+Let us now put $z = \frac{\rho}{\sigma_V} V_{n+1,k_u}$ and consider an expression:
+$$q \mathcal{E^-} \biggr{(} \mathbf{1}_{(0, +\infty)}(y_k + z)\cdot \mathcal{E}^+ F_{n+1}(y_k) \biggr{)} = q \int_{-\infty}^{0} -\beta^-_{q} e^{-\beta^-_{q} u} \mathbf{1}_{(0, +\infty)}(u+(y_k+z)) \cdot \mathcal{E}^+ F_{n+1}(u+y_k) du.$$
+Directly applying the condition of the indicator-function, we obtain:
+$$q \mathcal{E^-} \biggr{(} \mathbf{1}_{(0, +\infty)}(y_k + z)\cdot \mathcal{E}^+ F_{n+1}(y_k) \biggr{)} = 
+q \int_{-(z+y_k)}^{0} -\beta^-_{q} e^{-\beta^-_{q} u} \cdot \mathcal{E}^+ F_{n+1}(u+y_k) du$$
+We can make a substitution $w = u + y_k$; $u = w - y_k $ again and write it down as:
+$$ q \int_{-z}^{y_k} -\beta^-_{q} e^{-\beta^-_{q} (w-y_k)} \mathcal{E}^+ F_{n+1}(w) dw = 
+q e^{\beta^-_{q} y_k }\int_{-z}^{y_k} - \beta^-_{q} e^{-\beta^-_{q} w} \mathcal{E}^+ F_{n+1}(w) dw.$$
+
+Then, for $y_{k+1} = y_k + h$, using the same reasoning as in the previous case, we finally get:
+\begin{align*}
+	q \mathcal{E^-} \bigr{(} \mathbf{1}_{(0, +\infty)}(y_{k+1} + z)\cdot \mathcal{E}^+ F_{n+1}(y_{k+1}) \bigr{)} &= \\
+	= q e^{\beta^-_{q}(y_k+h)} \biggr{(}\int_{-z}^{y_k} -\beta^-_{q} e^{-\beta^-_{q} w} \mathcal{E}^+ F_{n+1}(w) dw	&+ \int_{y_k}^{y_k + h} - \beta^-_{q} e^{-\beta^-_{q} w} \mathcal{E}^+ F_{n+1}(w) dw \biggr{)} \approx \\
+	\approx q \biggr{(} e^{\beta^-_{q}h} \mathcal{E^-} \mathbf{1}_{(-\infty, 0)}(y_{k}+z)\cdot \mathcal{E}^+ F_{n+1}(y_{k}) &+  \frac{h}{2} \cdot (-\beta^-_{q})\bigr{(} \mathcal{E^+}F_{n+1}(y_{k+1}) + e^{\beta^-_{q}h} \mathcal{E}^+F_{n+1}(y_k) \bigr{)}\biggr{)}.\\
+\end{align*}
+A similar modification for the Simpson formula case gives us:
+
+\begin{align*}
+q \mathcal{E^-} \bigr{(} \mathbf{1}_{(0, +\infty)}(y_{k+2} + z)\cdot \mathcal{E}^+ F_{n+1}(y_{k+2}) \bigr{)} &= \\
+= q e^{\beta^-_{q}(y_k+2h)} \biggr{(}\int_{-z}^{y_k} -\beta^-_{q} e^{-\beta^-_{q} w} \mathcal{E}^+ F_{n+1}(w) dw	&+ \int_{y_k}^{y_k + 2h} - \beta^-_{q} e^{-\beta^-_{q} w} \mathcal{E}^+ F_{n+1}(w) dw \biggr{)} \approx \\
+\approx q \biggr{(} e^{2\beta^-_{q}h} \mathcal{E^-} \mathbf{1}_{(-\infty, 0)}(y_{k}+z)\cdot \mathcal{E}^+ F_{n+1}(y_{k}) &+ \\
++ \frac{h}{3} \cdot (-\beta^-_{q})\bigr{(} e^{2\beta^-_{q}h} \mathcal{E^+}F_{n+1}(y_{k+2}) &+
+e^{\beta^-_{q}h}\mathcal{E^+}F_{n+1}(y_{k+1}) +
+\mathcal{E}^+F_{n+1}(y_k) \bigr{)}\biggr{)}.
+\end{align*}
+
+
+Using the procedure above to solve the arising 1-dimensional problems, we obtain an approximate solution for \ref{problem-initial}.
+
+\subsection{Operator splitting for the jump-diffusion model case}
+The method proposed can be naturally generalized for the Bates-like case, where jump component corresponds to Kou \cite{kou} model. It arises in applications where the discontinuous behaviour of a random walk is essential, both positive and negative jumps are allowed, and jumps are considered exponentially distributed.
+
+Let us recall (see, for example \cite{itkin}) that in Kou model the L\`evy density is defined by the equation:
+
+\begin{equation}\label{kou-model}
+\pi(dx) = \lambda [p \lambda_+ e^{-\lambda_+ x} \mathbf{1}_{x \ge 0} + (1-p) \lambda_- e^{-\lambda_-x} \mathbf{1}_{x<0}]dx,
+\end{equation}
+where parameters $\lambda_+>1$, $\lambda>0$, $\lambda_-<0$ sets the respective jumps intensities, $p>0$ denotes the probability of positive jumps. For model calibration there is an alternative parametrization, where $c_+ := p\lambda_+$ and $c_- := p\lambda_-$. We will use it for the rest of the section, as it is more compact.
+
+In this model, instead of \eqref{charexp-diffusional} we end up with the following characteristic exponent:
+\begin{equation}\label{charexp-kou}
+\psi_{n,k}(\xi) = \frac{\sigma_{n,k}}{2} \xi^2 - i\gamma_{n,k}\xi + \frac{ic_+\xi}{i\xi - \lambda_+} + \frac{ic_-\xi}{i\xi - \lambda_-},
+\end{equation}
+where coefficients $\sigma_{n,k}$ and $\gamma_{n,k}$ are calculated so that the jump-diffusion process is a martingale. It can also be used to derive an analytic form of factorization.
+Let us recall that $\psi(\xi)$ is a symbol of a respective pseudo-differential operator, which we denote here as $L$. We can use a technique known as the Strang splitting, and decompose $L$ into two parts: the diffusion part, $D$, with a symbol:
+$$\frac{\sigma_{n,k}}{2} \xi^2 - i\gamma_{n,k}\xi,$$
+and a jump-related part, $J$, with a symbol:
+$$\frac{ic_+\xi}{i\xi - \lambda_+} + \frac{ic_-\xi}{i\xi - \lambda_-},$$
+so that $Lf = [D+J]f$. The factorization process of $D$ was described in Sect. \ref{factorization-section}. 
+
+As for operator $J$, let us derive functions $\phi^{\pm}_J(xi)$ such that:
+
+\begin{equation} \label{prefactorization}
+\phi^+_J (xi) \cdot \phi^-_J (xi) = \frac{q}{q + (\frac{i\xi c_+}{i\xi - \lambda_+} + \frac{i\xi c_-}{i\xi - \lambda_-})} = 
+\frac{q(i \xi - \lambda_+)(i\xi - \lambda_-)}{(q + c_+ + c_-)(i\xi - \beta^+_J)(i\xi - \beta^-_J)},
+\end{equation}
+where $\beta^+_J$ and $\beta^-_J$ are the roots of the arising equation for $i\xi$:
+\begin{equation}
+\biggr{(}q + c_+ + c_-\biggr{)}(i \xi)^2 - \biggr{(}\lambda_+(q + c_-) + \lambda_-(q + c_+) \biggr{)}i\xi + q \lambda_+ \lambda_- = 0,
+\end{equation}
+which appears in a denominator by regrouping an expression:
+\begin{equation}
+q(i \xi - \lambda_+)(i \xi - \lambda_-) + i\xi c_+ (i \xi - \lambda_-) + i\xi c_- (i\xi - \lambda_+).
+\end{equation}
+As $q \lambda_+ \lambda_- < 0$, we can assume $i\beta^+_J$ and $i\beta^-_J$ to be located at the upper and the lower half-plane, respectively. A straightforward formula for $\beta^\pm_J$ will be:
+
+\begin{equation}
+\beta^\pm_J = \frac{\bigr{(}\lambda_+(q+c_-) + \lambda_-(q + c_+)\bigr{)} \pm \sqrt{\bigr{(}(\lambda_- (q+c_+) + \lambda_+ (q + c_-)\bigr{)}^2 - 4 (q + c_+ + c_-) q \lambda_+ \lambda_-} }{2\bigr{(}q + c_+ + c_-\bigr{)}}.
+\end{equation}
+
+We can now define $\phi_j^\pm(\xi)$ and complete the factorization. As they must satisfy a condition $\phi_j^\pm(0) = 1$, from \eqref{prefactorization} we obtain:
+
+\begin{align}\label{factors-cou-preliminary}
+\phi_j^+(\xi) &= \frac{\beta^+_J}{\lambda_+} \cdot \frac{i\xi - \lambda_+}{i\xi - \beta^+_J} = \frac{\beta^+_J}{\lambda_+} + \frac{\lambda_+-\beta^+_J}{\lambda_+} \cdot \frac{-\beta^+_J}{i \xi - \beta^+_J}, \\ 
+\phi_j^-(\xi) &= \frac{\beta^-_J}{\lambda_-} \cdot \frac{i\xi - \lambda_-}{i\xi - \beta^-_J} = \frac{\beta^-_J}{\lambda_-} + \frac{\lambda_- - \beta^-_J}{\lambda_-} \cdot \frac{-\beta^-_J}{i \xi - \beta^-_J}.
+\end{align}
+Expressions $\frac{-\beta^+_J}{i \xi - \beta^+_J}$ and $\frac{-\beta^-_J}{i \xi - \beta^-_J}$ are characteristic functions of exponential distributions, so we can write the respective distribution functions $P^\pm_J(du)$ as:
+
+\begin{align}
+P^+_J(du) = \frac{\lambda_+ - \beta^+_J}{\lambda_+} \cdot \beta^+_J e^{-\beta^+_J u} \mathbf{1}_{(0, +\infty)}(u) du, \\
+P^-_J(du) = \frac{\lambda_- - \beta^-_J}{\lambda_-} \cdot \beta^-_J e^{-\beta^-_J u} \mathbf{1}_{(-\infty, 0)}(u) du.
+\end{align}
+
+Now solve the equation similar to \eqref{convolution-calculation} using $P^\pm_J(du)$ for jump-related part.
+
+To combine the results together we use formula 5.27 from \cite{itkin} and use the Strang splitting scheme. We can focus at this point at the equation
+\begin{align}\label{jump-diffusion-problem}
+(\frac{\partial}{\partial t} + L)f_n(x, t) = 0,
+\end{align}
+where $f_n(x, t)$ is a jump-diffusional equivalent of $F_n(x)$ in \eqref{convolution-calculation}, with the respective terminal and boundary conditions. Rewriting it in a form
+\begin{equation}
+f(x, t+\Delta t) - f(x, t) + \Delta t L f(x,t) = 0
+\end{equation}
+gives us a representation:
+\begin{equation}\label{solution-exp}
+f(x, t+\Delta t) = e^{-\Delta t L} f(x, t).
+\end{equation}
+Let us now recall that $L = D + J$ and write it as:
+
+\begin{equation}
+f(x, t+\Delta t) = e^{-\Delta t(D+J)}f(x, t) = e^{-\frac{\Delta t}{2} D} e^{- \Delta t J} e^{-\frac{\Delta t}{2} D} f(x, t).
+\end{equation}
+Fractional step representation of this scheme is:
+\begin{align*}
+f^{(1)}(x, t) &= e^{-\frac{\Delta t}{2} D} f(x, t), \\
+f^{(2)}(x, t) &= e^{-\Delta t J} f^{(1)}(x, t), \\
+f(x, t + \Delta t) &= e^{-\frac{\Delta t}{2} D} f^{(2)}(x, t). \\
+\end{align*}
+With $\Delta t$ small, the following approximation can be used:
+
+\begin{align*}
+f^{(1)}(x, t) &\approx (1-\frac{\Delta t}{2} D) f(x, t), \\
+f^{(2)}(x, t) &\approx (1-\Delta t J) f^{(1)}(x, t), \\
+f(x, t + \Delta t) &\approx (1-\frac{\Delta t}{2} D) f^{(2)}(x, t).
+\end{align*}
+The Strang splitting-based numerical solution scheme can have an error of $o$$(\Delta t)^2$. Following the scheme we can solve the equation on small time frames for the case of jump-diffusional Kou model with only a slight modifications of the method proposed in the paper (the coefficients $\sigma_{n, k}$, $\gamma_{n,k}$ and the exact equation for $X_t$ should be written accordingly).
+
+\section{Results and discussions}
+
+As we are calculating operators values using their values on the nearest grid elements, we can reduce the amount of computations from  $O(n\ln{n})$, which are necessary for the technique based on Fourier transform proposed in \cite{kudr_jopcs}, to $O(n)$. Due to the fact that the numerical solution for a 3-dimensional equation that we consider, involves a significant number of iterations, which requires the use of this technique (more precisely, we need $2$ for each node of a tree where the Markov chain resides, except for the very last layer), the method proposed can give a notable advantage in terms of convergence speed and computational performance.
+
+To achieve good accuracy on some coefficients values, it becomes necessary to use high order integration routines, with a suitable modification of an approximate formula, and construct a sufficiently dense grid for a spatial variable.
+
+\ack{}
+The reported study was funded by RFBR according to the research project No 18-01-00910.
+
+\section*{References}
+\begin{thebibliography}{22}
+
+\bibitem{alfonsi} Alfonsi A 2010 High order discretization schemes for the CIR process: application to affine term structure and Heston models {\it Mathematics of Computation} {\bf 79} 209--37
+
+\bibitem{zanette_tree} Apolloni E, Caramellino L and Zanette A 2015 A robust tree method for pricing American options with CIR stochastic interest rate {\it IMA Journal of Management Mathematics} {\bf 26}(4) 377--401
+
+\bibitem{bates} Bates D S 1996 Jumps and stochastic volatility: exchange rate processes implicit in deutsche mark options {\it Review of Financial Studies.}  {\bf 9} 69--107
+
+\bibitem{b_s} Black F and Scholes M 1973 The pricing of options and corporate liabilities {\it Journal of Political Economy} {\bf 81}(3) 637--54
+
+\bibitem{touzi} Bouchard B, Karoui N El and Touzi N 2005 Maturity randomization for stochastic control problems  {\it Annals of Applied Probability} {\bf 15}(4) 2575--605
+
+\bibitem{boya_lev} Boyarchenko M Levendorski\v{i} S 2009 Prices and sensitivities of barrier and first-touch digital options in Levy-driven models {\it International Journal of Theoretical and Applied Finance} {\bf 12}(08) 1125--70
+
+\bibitem{zanette_heston} Briani D M, Caramellino L and Zanette A 2017 A hybrid approach for the implementation of the Heston model {\it IMA Journal of Management Mathematics} {\bf 28}(4) 467--500
+
+\bibitem{carr} Carr P 1998 Randomization and the American put {\it Review of Financial Studies} {\bf 11} 597--626
+
+\bibitem{chiarella} Chiarella C, Kang B and Meyer G H 2010 The evaluation of barrier option prices under stochastic volatility {\it Computers \& Mathematics with Applications} {\ bf 64} 2034--48
+
+\bibitem{chourdakis} Chourdakis K 2005 Levy processes driven by stochastic volatility {\it Asia-Pacific Financial Markets}(12) 333--52
+
+\bibitem{cont_tankov} Cont R and Tankov P 2004 {\it Financial Modelling with Jump Processes} (Boca Raton: Chapman \& Hall/CRC Financial Mathematics Series)
+
+\bibitem{cir} Cox J C, Ingersoll J E and Ross S A 1985 A theory of the term structure of interest rates  {\it Econometrica.} {\bf 53} 385--408
+
+\bibitem{estrom} Estr\"om E and Tysk J 2010 The Black-Scholes equation in stochastic volatility models {\it Journal of Mathematical Analysis and Applications} {\bf 368} 498--507
+
+\bibitem{fang} Fang F and Oosterlee C M 2011 A Fourier-Based Valuation Method for Bermudan and Barrier Options under Heston's Model {\it SIAM Journal on Financial Mathematics} {\bf 2} 439--63
+
+\bibitem{feng} Feng Y Q 2017 CVA under Bates model with stochastic default intensity {\it Journal of Mathematical Finance} {\bf 7} 682--98
+
+\bibitem{heston} Heston L 1993 A closed-form solution for options with stochastic volatility with applications to bond and currency options. {\it Review of Financial Studies.} {\bf 6} 327--43
+
+\bibitem{heston_optandbubbles} Heston S L, Loewenstein M and Willard G A 2006 Options and bubbles {\it Review of Financial Studies} {\bf 20}(2) 359--90
+
+\bibitem{ikonen-toivanen} Ikonen S and Toivanen J 2007 Componentwise splitting methods for pricing American options under stochastic volatility {\it International Journal of Theoretical and Applied Finance} {\bf 10} 331--61
+
+\bibitem{itkin} Itkin A 2017 {\it Pricing Derivatives Under Levy Models} (Basel: Birkhauser)
+ 
+\bibitem{kudr_mex} Kudryavtsev O 2016 Advantages of the Laplace transform approach in pricing first touch digital options in L\'evy-driven models {\it Boletin de la Sociedad Matematica Mexicana} {\bf 22}(2) 711--31
+
+\bibitem{kudr_and_lev} Kudryavtsev O and Levendorski\v{i} S 2009 Fast and accurate pricing of barrier options under L\'evy processes {\it Finance and Stochastics} {\bf 13}(4) 531--62
+
+\bibitem{kudr_jopcs} Kudryavtsev O and Rodochenko V 2018 On a numerical method for solving integro-differential equations with variable coefficients with applications in finance {\it J. of Phys.: Conf. Series} {\bf 973}(1) 012054.
+
+%?
+\bibitem{kou} Kou S G 2002 A jump-diffusionm model for option pricing. {\it Management Science} {\bf 48}(8) 1086--101 
+
+%?
+\bibitem{merton} Merton R 1976 Option pricing when underlying stock returns are discontinuous {\it Journal of Financial Economics} {\bf 3} 125--44
+
+\bibitem{medvedev_scailett} Medvedev A and Scaillet O 2009 Pricing American options under stochastic volatility and stochastic interest rates
+{\it SSRN Electronic Journal} {\bf 98}(1) 145--59
+
+\bibitem{oksendal} Oksendal B 2012 {\it Stochastic Differential Equations} (New York: Springer-Verlag Heidenberg)
+
+\bibitem{vellekoop_nie} Vellekoop M and Nieuwenhuis H 2009 A tree-based method to price American Options in the Heston Model {\it The Journal of Computational Finance} {\bf 13} 1--21
+
+\bibitem{zvan} Zvan R, Forsyth P and Vetzal K 1998 A penalty method for American options with
+stochastic volatility {\it Journal of Computational and Applied Mathematics} {\bf 92} 199--218
+
+%------
+\end{thebibliography}
+\end{document}
+
+
